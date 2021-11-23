@@ -165,11 +165,7 @@ func (d *Driver) Stop(ctx context.Context, force bool) error {
 	return nil
 }
 
-func (d *Driver) Rm(ctx context.Context, force, rmVolume, rmBuildkit bool) error {
-	if !rmBuildkit {
-		return nil
-	}
-
+func (d *Driver) Rm(ctx context.Context, force bool, rmVolume bool) error {
 	if err := d.deploymentClient.Delete(ctx, d.deployment.Name, metav1.DeleteOptions{}); err != nil {
 		if !apierrors.IsNotFound(err) {
 			return errors.Wrapf(err, "error while calling deploymentClient.Delete for %q", d.deployment.Name)
