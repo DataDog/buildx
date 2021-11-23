@@ -12,7 +12,6 @@ Remove a builder instance
 | Name | Description |
 | --- | --- |
 | [`--builder string`](#builder) | Override the configured builder instance |
-| [`--keep-buildkitd`](#keep-buildkitd) | Keep the buildkitd daemon running |
 | [`--keep-state`](#keep-state) | Keep BuildKit state |
 
 
@@ -33,8 +32,3 @@ Same as [`buildx --builder`](buildx.md#builder).
 
 Keep BuildKit state, so it can be reused by a new builder with the same name.
 Currently, only supported by the [`docker-container` driver](buildx_create.md#driver).
-
-### <a name="keep-buildkitd"></a> Keep the buildkitd daemon running (--keep-buildkitd)
-
-Keep the buildkitd daemon running after the buildx context is removed. This is useful is when you manage buildkitd daemons and buildx contexts independently.
-Currently, only supported by the [`docker-container` and `kubernetes` drivers](buildx_create.md#driver).

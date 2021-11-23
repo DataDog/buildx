@@ -12,9 +12,8 @@ import (
 )
 
 type rmOptions struct {
-	builder       string
-	keepState     bool
-	keepBuildkitd bool
+	builder   string
+	keepState bool
 }
 
 func runRm(dockerCli command.Cli, in rmOptions) error {
@@ -31,7 +30,7 @@ func runRm(dockerCli command.Cli, in rmOptions) error {
 		if err != nil {
 			return err
 		}
-		err1 := rm(ctx, dockerCli, ng, in.keepState, in.keepBuildkitd)
+		err1 := rm(ctx, dockerCli, ng, in.keepState)
 		if err := txn.Remove(ng.Name); err != nil {
 			return err
 		}
@@ -43,7 +42,7 @@ func runRm(dockerCli command.Cli, in rmOptions) error {
 		return err
 	}
 	if ng != nil {
-		err1 := rm(ctx, dockerCli, ng, in.keepState, in.keepBuildkitd)
+		err1 := rm(ctx, dockerCli, ng, in.keepState)
 		if err := txn.Remove(ng.Name); err != nil {
 			return err
 		}
@@ -71,28 +70,23 @@ func rmCmd(dockerCli command.Cli, rootOpts *rootOptions) *cobra.Command {
 
 	flags := cmd.Flags()
 	flags.BoolVar(&options.keepState, "keep-state", false, "Keep BuildKit state")
-	flags.BoolVar(&options.keepBuildkitd, "keep-buildkitd", false, "Keep the buildkitd daemon running")
 
 	return cmd
 }
 
-func rm(ctx context.Context, dockerCli command.Cli, ng *store.NodeGroup, keepState, keepBuildkitd bool) error {
+func rm(ctx context.Context, dockerCli command.Cli, ng *store.NodeGroup, keepState bool) error {
 	dis, err := driversForNodeGroup(ctx, dockerCli, ng, "")
 	if err != nil {
 		return err
 	}
 	for _, di := range dis {
-		if di.Driver == nil {
-			continue
-		}
-		// Do not stop the buildkitd daemon when --keep-buildkitd is provided
-		if !keepBuildkitd {
+		if di.Driver != nil {
 			if err := di.Driver.Stop(ctx, true); err != nil {
 				return err
 			}
-		}
-		if err := di.Driver.Rm(ctx, true, !keepState, !keepBuildkitd); err != nil {
-			return err
+			if err := di.Driver.Rm(ctx, true, !keepState); err != nil {
+				return err
+			}
 		}
 		if di.Err != nil {
 			err = di.Err
