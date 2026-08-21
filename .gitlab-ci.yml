@@ -1,0 +1,6 @@
+include: https://gitlab-templates.ddbuild.io/compute-delivery/v3/compute-delivery.yml
+
+goreleaser:
+  extends: .compute-ci.goreleaser
+  before_script:
+    - !reference [.compute-ci.github-sts-token]
