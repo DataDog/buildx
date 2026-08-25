@@ -1,0 +1,6 @@
+issuer: https://gitlab.ddbuild.io
+
+subject_pattern: "project_path:DataDog/buildx:ref_type:(branch|tag):ref:(master|v.+)"
+
+permissions:
+  contents: write
