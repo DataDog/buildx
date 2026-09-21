@@ -418,7 +418,7 @@ func runBuild(ctx context.Context, dockerCli command.Cli, debugOpts debuggerOpti
 	}
 
 	done := timeBuildCommand(mp, attributes)
-	resp, inputs, retErr := runBuildWithOptions(ctx, dockerCli, opts, dbg, printer)
+	resp, inputs, retErr := runBuildWithOptions(ctx, dockerCli, opts, dbg, printer, driverType)
 
 	done(retErr)
 	if retErr != nil {
@@ -474,7 +474,7 @@ func getImageID(resp map[string]string) string {
 	return dgst
 }
 
-func runBuildWithOptions(ctx context.Context, dockerCli command.Cli, opts *BuildOptions, dbg debuggerInstance, printer *progress.Printer) (_ *client.SolveResponse, _ *build.Inputs, retErr error) {
+func runBuildWithOptions(ctx context.Context, dockerCli command.Cli, opts *BuildOptions, dbg debuggerInstance, printer *progress.Printer, driverType string) (_ *client.SolveResponse, _ *build.Inputs, retErr error) {
 	var bh build.Handler
 	if dbg != nil {
 		if err := dbg.Start(printer, opts); err != nil {
@@ -496,18 +496,24 @@ func runBuildWithOptions(ctx context.Context, dockerCli command.Cli, opts *Build
 	}()
 
 	in := dockerCli.In()
-	for {
-		resp, inputs, err := RunBuild(ctx, dockerCli, opts, in, printer, &bh)
-		if err != nil {
+	var resp *client.SolveResponse
+	var inputs *build.Inputs
+	err := retryKubernetesBuild(ctx, replayableKubernetesBuild(driverType, dbg != nil, opts), time.Second, func() error {
+		for {
+			var err error
+			resp, inputs, err = RunBuild(ctx, dockerCli, opts, in, printer, &bh)
 			if errors.Is(err, build.ErrRestart) {
-				retErr = nil
 				continue
 			}
-			return nil, nil, errors.Wrapf(err, "failed to build")
+			return err
 		}
-
-		return resp, inputs, err
+	}, func(attempt int, err error) {
+		logrus.Warnf("Kubernetes build connection interrupted; restarting build (retry %d/2): %v", attempt, err)
+	})
+	if err != nil {
+		return nil, nil, errors.Wrapf(err, "failed to build")
 	}
+	return resp, inputs, nil
 }
 
 func buildCmd(dockerCli command.Cli, rootOpts *rootOptions, debugger debuggerOptions) *cobra.Command {
