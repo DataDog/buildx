@@ -1,0 +1,8 @@
+include: https://gitlab-templates.ddbuild.io/compute-delivery/v3/compute-delivery.yml
+
+goreleaser:
+  extends: .compute-ci.goreleaser
+  variables:
+    EXTRA_LDFLAGS: "-X github.com/docker/buildx/version.Version=v{{.Version}} -X github.com/docker/buildx/version.Revision={{.Commit}}"
+  before_script:
+    - !reference [.compute-ci.github-sts-token]
