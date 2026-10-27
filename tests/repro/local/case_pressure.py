@@ -8,12 +8,21 @@ if '"cpu"' not in s:
 src.write_text(s)
 subprocess.run(['cc', '-static', '-O0', '-o', str(repro.CTX / 'repro'), str(src)], env=repro.ENV, check=True)
 name = __import__('os').environ['BUILDX_REPRO_CONTAINER']
+quota = float(__import__('os').environ.get('BUILDX_REPRO_CPU_LIMIT', '0.1'))
+if not 0.01 <= quota <= 2:
+    raise ValueError('local test quota must be between 0.01 and 2 CPUs')
 processes = []
 files = []
 results = []
 cmd = [str(repro.ROOT / 'buildctl'), '--addr', 'unix://' + repro.SOCK, 'debug', 'workers']
 try:
-    subprocess.run(['docker', 'update', '--cpus', '0.1', name], check=True, capture_output=True)
+    subprocess.run(['docker', 'update', '--cpus', str(quota), name], check=True, capture_output=True)
+    quiet_start = time.monotonic()
+    try:
+        quiet = subprocess.run(cmd, capture_output=True, text=True, timeout=5, env=repro.ENV)
+        quiet_result = {'timeout': False, 'returncode': quiet.returncode, 'elapsed_s': time.monotonic()-quiet_start}
+    except subprocess.TimeoutExpired:
+        quiet_result = {'timeout': True, 'elapsed_s': time.monotonic()-quiet_start}
     for i in range(4):
         ctx = repro.ROOT / ('cpu-context-' + str(i))
         ctx.mkdir(exist_ok=True)
@@ -41,5 +50,5 @@ finally:
             p.wait(timeout=10)
     for f in files:
         f.close()
-(repro.OUT / 'cpu-pressure-probes.json').write_text(json.dumps({'cpu_limit': 0.1, 'concurrent_builds': 4, 'probes': results, 'build_exits': [p.returncode for p in processes]}, indent=2))
-print(json.dumps({'probes': results, 'build_exits': [p.returncode for p in processes]}), flush=True)
+(repro.OUT / 'cpu-pressure-probes.json').write_text(json.dumps({'cpu_limit': quota, 'quiet_probe': quiet_result, 'concurrent_builds': 4, 'probes': results, 'build_exits': [p.returncode for p in processes]}, indent=2))
+print(json.dumps({'cpu_limit': quota, 'quiet_probe': quiet_result, 'probes': results, 'build_exits': [p.returncode for p in processes]}), flush=True)
