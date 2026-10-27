@@ -1,5 +1,6 @@
 """Run one explicitly selected reproduction against a disposable local worker."""
 import argparse
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -19,6 +20,7 @@ def main():
     parser.add_argument("--image", required=True, help="Already-cached BuildKit image pinned with @sha256:")
     parser.add_argument("--artifacts", required=True, type=Path, help="Directory on a filesystem with free space")
     parser.add_argument("--solve-helper", type=Path, help="Locally built helper for case_deadline")
+    parser.add_argument("--buildx-binary", type=Path, help="Use this local client through a private Docker plugin directory")
     args = parser.parse_args()
     if "@sha256:" not in args.image:
         parser.error("--image must be pinned by digest")
@@ -35,6 +37,16 @@ def main():
                TMPDIR=str(root / "tmp"))
     if args.solve_helper:
         env["BUILDX_SOLVE_HELPER"] = str(args.solve_helper.resolve())
+    client_override = None
+    if args.buildx_binary:
+        binary = args.buildx_binary.resolve(strict=True)
+        if not os.access(binary, os.X_OK):
+            parser.error("--buildx-binary must be executable")
+        plugins = root / "docker-config" / "cli-plugins"
+        plugins.mkdir(parents=True)
+        (plugins / "docker-buildx").symlink_to(binary)
+        env["DOCKER_CONFIG"] = str(plugins.parent)
+        client_override = {"path": str(binary), "sha256": hashlib.sha256(binary.read_bytes()).hexdigest()}
     name = "buildx-repro-" + uuid.uuid4().hex[:12]
     env["BUILDX_REPRO_CONTAINER"] = name
     def command(argv, **kwargs):
@@ -70,7 +82,7 @@ def main():
             "container_name": name,
             "buildx_version": command(DOCKER + ["buildx", "version"]).stdout.strip(),
             "buildctl_version": command([str(root / "buildctl"), "--version"]).stdout.strip(),
-            "scenario": args.scenario, "started_at": time.time(),
+            "scenario": args.scenario, "started_at": time.time(), "client_override": client_override,
         }
         (root / "evidence" / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
         result = subprocess.run([sys.executable, str(HERE / (args.scenario + ".py"))], env=env, timeout=300)

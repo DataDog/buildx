@@ -26,6 +26,7 @@ func TestLocalReproCommitDeadline(t *testing.T) {
 		}
 		t.Run(name, func(t *testing.T) {
 			received := make(chan struct{})
+			requestCancelled := make(chan struct{})
 			release := make(chan struct{})
 			payload := []byte("local-repro-layer")
 			dgst := digest.FromBytes(payload)
@@ -44,6 +45,7 @@ func TestLocalReproCommitDeadline(t *testing.T) {
 						select {
 						case <-release:
 						case <-r.Context().Done():
+							close(requestCancelled)
 							return
 						}
 					}
@@ -86,6 +88,13 @@ func TestLocalReproCommitDeadline(t *testing.T) {
 				}
 				if stall && err == nil {
 					t.Fatal("stalled response unexpectedly succeeded")
+				}
+				if stall {
+					select {
+					case <-requestCancelled:
+					case <-time.After(500 * time.Millisecond):
+						t.Fatal("Commit returned but the registry HTTP request was not cancelled")
+					}
 				}
 			case <-time.After(500 * time.Millisecond):
 				cancelPush()
