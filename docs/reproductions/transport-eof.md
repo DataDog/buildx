@@ -45,3 +45,9 @@ Keep this PR in draft until the mechanism and assertions are reviewed. Compare b
 Any eventual client patch must follow the Compute team's reviewed port into ddoghq/compute-delivery/repos/buildx. Do not merge this fork expecting a CI rollout. Daemon/dependency patches require their authoritative packaging path. No release or deployment is included.
 
 Shared helper files are identical across these independent reproduction drafts so each branch runs from master without depending on another experiment.
+
+## Follow-up version comparison (October 27)
+
+The new TestLocalReproSPDYTransport uses a loopback HTTP server and actual Kubernetes SPDY streams. Server disconnect surfaces EOF. Closing the client leaves the transport open on the fork baseline (5/5); PR #10 source passes (5/5). An overlay of v0.38.1 execconn.go and its matching upstream tests still fails transport cleanup (3/3), using the fork dependency graph: this is a source comparison, not a complete upstream checkout test. The released v0.38.1 binary also reproduces injected EOF and recovers on the next healthy build.
+
+The runner now accepts --buildx-binary /absolute/path/to/buildx. It selects that binary through a private Docker plugin directory and records its SHA-256; it does not replace the installed plugin. Latest stable was verified through the upstream GitHub releases API as v0.38.1 (October 20, 2026). The tested arm64 release checksum is 3b83b3731916ba433feccaaa689fe5bcdc81c641d92c8e6c2ea865dfa141c97a. Daemon version remains v0.33.1; a client upgrade does not upgrade a remote daemon.
