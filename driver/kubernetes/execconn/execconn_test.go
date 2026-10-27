@@ -18,6 +18,7 @@ import (
 type fakeExecutor struct {
 	unblock chan struct{}
 	err     error
+	stopped chan struct{}
 }
 
 func (f *fakeExecutor) Stream(_ remotecommand.StreamOptions) error {
@@ -25,6 +26,9 @@ func (f *fakeExecutor) Stream(_ remotecommand.StreamOptions) error {
 }
 
 func (f *fakeExecutor) StreamWithContext(ctx context.Context, _ remotecommand.StreamOptions) error {
+	if f.stopped != nil {
+		defer close(f.stopped)
+	}
 	select {
 	case <-f.unblock:
 		return f.err
@@ -115,4 +119,19 @@ func TestNewExecConnPropagatesStreamEnd(t *testing.T) {
 		_, err = conn.Write([]byte("test"))
 		require.ErrorIs(t, err, context.Canceled)
 	})
+}
+
+func TestCloseCancelsExecStream(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	fe := &fakeExecutor{unblock: make(chan struct{}), stopped: make(chan struct{})}
+	conn := newExecConn(ctx, fe)
+	require.NoError(t, conn.Close())
+	require.NoError(t, conn.Close())
+	select {
+	case <-fe.stopped:
+	case <-time.After(5 * time.Second):
+		t.Fatal("closing the connection did not terminate the exec stream")
+	}
+	require.NoError(t, ctx.Err(), "closing a connection must not cancel the build")
 }
