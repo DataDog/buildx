@@ -41,3 +41,9 @@ Keep this PR in draft until the mechanism and assertions are reviewed. Compare b
 Any eventual client patch must follow the Compute team's reviewed port into ddoghq/compute-delivery/repos/buildx. Do not merge this fork expecting a CI rollout. Daemon/dependency patches require their authoritative packaging path. No release or deployment is included.
 
 Shared helper files are identical across these independent reproduction drafts so each branch runs from master without depending on another experiment.
+
+## Follow-up version comparison (October 27)
+
+Latest upstream Buildx v0.38.1 was also tested with the same pinned daemon. The unresponsive bootstrap endpoint still returned after approximately 40 seconds with --timeout=2s. This flag describes loading builder status; this observation alone is not a timeout-contract defect.
+
+The runner now accepts --buildx-binary /absolute/path/to/buildx. It selects that binary through a private Docker plugin directory and records its SHA-256; it does not replace the installed plugin. Latest stable was verified through the upstream GitHub releases API as v0.38.1 (October 20, 2026). The tested arm64 release checksum is 3b83b3731916ba433feccaaa689fe5bcdc81c641d92c8e6c2ea865dfa141c97a. Daemon version remains v0.33.1; a client upgrade does not upgrade a remote daemon.
