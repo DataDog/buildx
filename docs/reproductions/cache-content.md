@@ -39,3 +39,9 @@ Keep this PR in draft until the mechanism and assertions are reviewed. Compare b
 Any eventual client patch must follow the Compute team's reviewed port into ddoghq/compute-delivery/repos/buildx. Do not merge this fork expecting a CI rollout. Daemon/dependency patches require their authoritative packaging path. No release or deployment is included.
 
 Shared helper files are identical across these independent reproduction drafts so each branch runs from master without depending on another experiment.
+
+## Follow-up version comparison (October 27)
+
+Correction to the initial observation: recovery latency varies. A later fork-baseline run and the released Buildx v0.38.1 both failed the final ten-second recovery assertion. A separate cross-client experiment kept the same daemon and failed with both the fork and installed v0.34.1, then succeeded after additional waits of roughly a minute without restart. Thus this is not established as a client-specific regression or permanent poisoning. The ten-second assertion is intentionally retained so slow recovery remains visible; a failing scenario exit is meaningful evidence, not proof the fixture failed. Preserve each retry log and registry fetch record.
+
+The runner now accepts --buildx-binary /absolute/path/to/buildx. It selects that binary through a private Docker plugin directory and records its SHA-256; it does not replace the installed plugin. Latest stable was verified through the upstream GitHub releases API as v0.38.1 (October 20, 2026). The tested arm64 release checksum is 3b83b3731916ba433feccaaa689fe5bcdc81c641d92c8e6c2ea865dfa141c97a. Daemon version remains v0.33.1; a client upgrade does not upgrade a remote daemon.
