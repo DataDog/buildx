@@ -40,15 +40,18 @@ func ExecConn(ctx context.Context, restClient rest.Interface, restConfig *rest.C
 // newExecConn wires a remotecommand.Executor's stdin/stdout streams up as a net.Conn.
 // It is split from ExecConn to ease testing.
 func newExecConn(ctx context.Context, exec remotecommand.Executor) net.Conn {
+	ctx, cancel := context.WithCancel(ctx)
 	stdinR, stdinW := io.Pipe()
 	stdoutR, stdoutW := io.Pipe()
 	kc := &kubeConn{
 		stdin:      stdinW,
+		cancel:     cancel,
 		stdout:     stdoutR,
 		localAddr:  dummyAddr{network: "dummy", s: "dummy-0"},
 		remoteAddr: dummyAddr{network: "dummy", s: "dummy-1"},
 	}
 	go func() {
+		defer cancel()
 		serr := exec.StreamWithContext(ctx, remotecommand.StreamOptions{
 			Stdin:  stdinR,
 			Stdout: stdoutW,
@@ -66,6 +69,7 @@ func newExecConn(ctx context.Context, exec remotecommand.Executor) net.Conn {
 }
 
 type kubeConn struct {
+	cancel        context.CancelFunc
 	stdin         io.WriteCloser
 	stdout        io.ReadCloser
 	stdioClosedMu sync.Mutex // for stdinClosed and stdoutClosed
@@ -99,6 +103,9 @@ func (c *kubeConn) CloseRead() error {
 }
 
 func (c *kubeConn) Close() error {
+	// Closing the pipes alone does not stop a remote command waiting for exit.
+	// Cancel this connection only; the parent build context remains usable.
+	c.cancel()
 	var err error
 	c.stdioClosedMu.Lock()
 	stdinClosed := c.stdinClosed
