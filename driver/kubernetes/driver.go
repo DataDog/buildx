@@ -299,6 +299,15 @@ func (d *Driver) Dial(ctx context.Context) (net.Conn, error) {
 		return nil, errors.Errorf("pod %s does not have any container", pod.Name)
 	}
 	containerName := pod.Spec.Containers[0].Name
+	// Emit the exact worker identity at normal verbosity so a failed CI job can
+	// be joined to daemon logs and Kubernetes events without an audit-log search.
+	logrus.WithFields(logrus.Fields{
+		"namespace": pod.Namespace,
+		"pod":       pod.Name,
+		"pod_uid":   string(pod.UID),
+		"node":      pod.Spec.NodeName,
+		"container": containerName,
+	}).Info("Connecting to Kubernetes BuildKit worker")
 	cmd := []string{"buildctl", "dial-stdio"}
 
 	// Retry connection with exponential backoff for transient errors
