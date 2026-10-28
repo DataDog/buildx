@@ -1,0 +1,39 @@
+--- a/vendor/github.com/containerd/containerd/v2/core/remotes/docker/pusher.go
++++ b/vendor/github.com/containerd/containerd/v2/core/remotes/docker/pusher.go
+@@ -310,6 +310,8 @@
+ 	// TODO: Support chunked upload
+ 
+ 	pushw := newPushWriter(p.dockerBase, ref, desc.Digest, p.tracker, isManifest)
++	ctx, cancel := context.WithCancel(ctx)
++	pushw.cancel = cancel
+ 
+ 	req.body = func() (io.ReadCloser, error) {
+ 		pr, pw := io.Pipe()
+@@ -365,6 +367,7 @@
+ 	pipe *io.PipeWriter
+ 
+ 	done      chan struct{}
++	cancel    context.CancelFunc
+ 	closeOnce sync.Once
+ 
+ 	pipeC chan *io.PipeWriter
+@@ -482,6 +485,9 @@
+ 	// called multiple times without panicking
+ 	pw.closeOnce.Do(func() {
+ 		close(pw.done)
++		if pw.cancel != nil {
++			pw.cancel()
++		}
+ 	})
+ 	if pw.pipe != nil {
+ 		status, err := pw.tracker.GetStatus(pw.ref)
+@@ -523,6 +529,9 @@
+ 	// TODO: timeout waiting for response
+ 	var resp *http.Response
+ 	select {
++	case <-ctx.Done():
++		pw.Close()
++		return ctx.Err()
+ 	case <-pw.done:
+ 		return io.ErrClosedPipe
+ 	case err := <-pw.errC:
