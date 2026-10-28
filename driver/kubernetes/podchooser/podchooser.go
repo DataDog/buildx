@@ -19,13 +19,14 @@ type PodChooser interface {
 }
 
 type RandomPodChooser struct {
-	PodClient   kubeclient.PodClient
-	Deployment  *appsv1.Deployment
-	StatefulSet *appsv1.StatefulSet
+	PodClient     kubeclient.PodClient
+	Deployment    *appsv1.Deployment
+	StatefulSet   *appsv1.StatefulSet
+	AvoidPodNames []string
 }
 
 func (pc *RandomPodChooser) ChoosePod(ctx context.Context) (*corev1.Pod, error) {
-	pods, err := ListRunningPods(ctx, pc.PodClient, pc.Deployment, pc.StatefulSet)
+	pods, err := ListRunningPods(ctx, pc.PodClient, pc.Deployment, pc.StatefulSet, pc.AvoidPodNames...)
 	if err != nil {
 		return nil, err
 	}
@@ -38,14 +39,15 @@ func (pc *RandomPodChooser) ChoosePod(ctx context.Context) (*corev1.Pod, error) 
 }
 
 type StickyPodChooser struct {
-	Key         string
-	PodClient   kubeclient.PodClient
-	Deployment  *appsv1.Deployment
-	StatefulSet *appsv1.StatefulSet
+	Key           string
+	PodClient     kubeclient.PodClient
+	Deployment    *appsv1.Deployment
+	StatefulSet   *appsv1.StatefulSet
+	AvoidPodNames []string
 }
 
 func (pc *StickyPodChooser) ChoosePod(ctx context.Context) (*corev1.Pod, error) {
-	pods, err := ListRunningPods(ctx, pc.PodClient, pc.Deployment, pc.StatefulSet)
+	pods, err := ListRunningPods(ctx, pc.PodClient, pc.Deployment, pc.StatefulSet, pc.AvoidPodNames...)
 	if err != nil {
 		return nil, err
 	}
@@ -70,7 +72,7 @@ func (pc *StickyPodChooser) ChoosePod(ctx context.Context) (*corev1.Pod, error) 
 	return podMap[chosen], nil
 }
 
-func ListRunningPods(ctx context.Context, client kubeclient.PodClient, depl *appsv1.Deployment, stat *appsv1.StatefulSet) ([]*corev1.Pod, error) {
+func ListRunningPods(ctx context.Context, client kubeclient.PodClient, depl *appsv1.Deployment, stat *appsv1.StatefulSet, avoid ...string) ([]*corev1.Pod, error) {
 	var labelSelector *metav1.LabelSelector
 	if depl != nil {
 		labelSelector = depl.Spec.Selector
@@ -103,6 +105,25 @@ func ListRunningPods(ctx context.Context, client kubeclient.PodClient, depl *app
 			runningPods = append(runningPods, pod)
 		}
 	}
+	// Prefer a different eligible worker after a setup failure. If there is only
+	// one eligible worker, retain the existing bounded retry behavior.
+	preferred := make([]*corev1.Pod, 0, len(runningPods))
+	for _, pod := range runningPods {
+		skip := false
+		for _, name := range avoid {
+			if pod.Name == name {
+				skip = true
+				break
+			}
+		}
+		if !skip {
+			preferred = append(preferred, pod)
+		}
+	}
+	if len(preferred) > 0 {
+		runningPods = preferred
+	}
+
 	sort.Slice(runningPods, func(i, j int) bool {
 		return runningPods[i].Name < runningPods[j].Name
 	})
