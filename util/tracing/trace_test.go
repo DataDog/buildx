@@ -29,6 +29,8 @@ func clearCIEnv(t *testing.T) {
 		"OTEL_TRACES_EXPORTER",
 		"OTEL_EXPORTER_OTLP_ENDPOINT",
 		"OTEL_EXPORTER_OTLP_PROTOCOL",
+		"OTEL_EXPORTER_OTLP_TRACES_ENDPOINT",
+		"OTEL_EXPORTER_OTLP_TRACES_PROTOCOL",
 		"OTEL_RESOURCE_ATTRIBUTES",
 		"POD_NAMESPACE",
 		"K8S_CLUSTER_NAME",
@@ -71,4 +73,31 @@ func TestConfigureCIIPv6(t *testing.T) {
 	ConfigureCI()
 
 	require.Equal(t, "http://[2001:db8::1]:4317", os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT"))
+}
+
+func TestConfigureCIHTTPProtocol(t *testing.T) {
+	for _, protocolEnv := range []string{otelExporterProtocol, otelTracesExporterProtocol} {
+		t.Run(protocolEnv, func(t *testing.T) {
+			clearCIEnv(t)
+
+			t.Setenv("CI", "true")
+			t.Setenv("HOST_IP", "10.0.0.1")
+			t.Setenv(protocolEnv, "http/protobuf")
+			ConfigureCI()
+
+			require.Equal(t, "http://10.0.0.1:4318", os.Getenv(otelExporterEndpoint))
+		})
+	}
+}
+
+func TestConfigureCITracesEndpoint(t *testing.T) {
+	clearCIEnv(t)
+
+	t.Setenv("CI", "true")
+	t.Setenv("CI_JOB_ID", "123")
+	t.Setenv(otelTracesExporterEndpoint, "http://collector:4318/v1/traces")
+	ConfigureCI()
+
+	require.Empty(t, os.Getenv(otelExporterEndpoint))
+	require.Equal(t, "ci.job.id=123", os.Getenv(otelResourceAttrs))
 }

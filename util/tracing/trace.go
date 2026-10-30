@@ -16,9 +16,11 @@ import (
 )
 
 const (
-	otelExporterEndpoint = "OTEL_EXPORTER_OTLP_ENDPOINT"
-	otelExporterProtocol = "OTEL_EXPORTER_OTLP_PROTOCOL"
-	otelResourceAttrs    = "OTEL_RESOURCE_ATTRIBUTES"
+	otelExporterEndpoint       = "OTEL_EXPORTER_OTLP_ENDPOINT"
+	otelExporterProtocol       = "OTEL_EXPORTER_OTLP_PROTOCOL"
+	otelTracesExporterEndpoint = "OTEL_EXPORTER_OTLP_TRACES_ENDPOINT"
+	otelTracesExporterProtocol = "OTEL_EXPORTER_OTLP_TRACES_PROTOCOL"
+	otelResourceAttrs          = "OTEL_RESOURCE_ATTRIBUTES"
 )
 
 // ConfigureCI configures the Buildx process to export OTLP traces for CI
@@ -31,7 +33,8 @@ func ConfigureCI() {
 		return
 	}
 
-	if _, ok := lookup(otelExporterEndpoint); !ok {
+	tracesEndpoint, _ := lookup(otelTracesExporterEndpoint)
+	if _, ok := lookup(otelExporterEndpoint); !ok && strings.TrimSpace(tracesEndpoint) == "" {
 		// Resolve HOST_IP here instead of passing the Kubernetes $(HOST_IP)
 		// expression to the Buildx process. That expression is only expanded by
 		// Kubernetes when it injects a container environment.
@@ -40,7 +43,7 @@ func ConfigureCI() {
 		if !ok || host == "" {
 			return
 		}
-		setenvIfMissing(otelExporterEndpoint, "http://"+net.JoinHostPort(host, "4317"), lookup)
+		setenvIfMissing(otelExporterEndpoint, "http://"+net.JoinHostPort(host, defaultOTLPPort(lookup)), lookup)
 	}
 	setenvIfMissing("OTEL_TRACES_EXPORTER", "otlp", lookup)
 	setenvIfMissing(otelExporterProtocol, "grpc", lookup)
@@ -49,6 +52,17 @@ func ConfigureCI() {
 			_ = os.Setenv(otelResourceAttrs, attrs)
 		}
 	}
+}
+
+func defaultOTLPPort(lookup func(string) (string, bool)) string {
+	protocol, ok := lookup(otelTracesExporterProtocol)
+	if !ok || strings.TrimSpace(protocol) == "" {
+		protocol, _ = lookup(otelExporterProtocol)
+	}
+	if strings.HasPrefix(strings.ToLower(strings.TrimSpace(protocol)), "http") {
+		return "4318"
+	}
+	return "4317"
 }
 
 func setenvIfMissing(name, value string, lookup func(string) (string, bool)) {
