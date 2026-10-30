@@ -33,6 +33,9 @@ func ConfigureCI() {
 		return
 	}
 
+	unsetenvIfBlank(otelTracesExporterEndpoint, lookup)
+	unsetenvIfBlank(otelTracesExporterProtocol, lookup)
+
 	endpoint, _ := lookup(otelExporterEndpoint)
 	tracesEndpoint, _ := lookup(otelTracesExporterEndpoint)
 	if strings.TrimSpace(endpoint) == "" && strings.TrimSpace(tracesEndpoint) == "" {
@@ -54,6 +57,12 @@ func ConfigureCI() {
 	}
 	if attrs := mergeCIResourceAttributes(existingAttrs, lookup); attrs != "" && attrs != existingAttrs {
 		_ = os.Setenv(otelResourceAttrs, attrs)
+	}
+}
+
+func unsetenvIfBlank(name string, lookup func(string) (string, bool)) {
+	if value, ok := lookup(name); ok && strings.TrimSpace(value) == "" {
+		_ = os.Unsetenv(name)
 	}
 }
 

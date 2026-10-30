@@ -1,9 +1,11 @@
 package tracing
 
 import (
+	"context"
 	"os"
 	"testing"
 
+	"github.com/moby/buildkit/util/tracing/detect"
 	"github.com/stretchr/testify/require"
 )
 
@@ -133,4 +135,11 @@ func TestConfigureCIEmptyOTelValues(t *testing.T) {
 	require.Equal(t, "http://10.0.0.1:4317", os.Getenv(otelExporterEndpoint))
 	require.Equal(t, "grpc", os.Getenv(otelExporterProtocol))
 	require.Equal(t, "ci.job.id=123", os.Getenv(otelResourceAttrs))
+	require.Empty(t, os.Getenv(otelTracesExporterEndpoint))
+	require.Empty(t, os.Getenv(otelTracesExporterProtocol))
+
+	exporter, err := detect.NewSpanExporter(context.Background())
+	require.NoError(t, err)
+	require.NotNil(t, exporter)
+	require.NoError(t, exporter.Shutdown(context.Background()))
 }
