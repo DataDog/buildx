@@ -2,6 +2,8 @@ package tracing
 
 import (
 	"context"
+	"net"
+	"net/url"
 	"os"
 	"strings"
 
@@ -34,10 +36,11 @@ func ConfigureCI() {
 		// expression to the Buildx process. That expression is only expanded by
 		// Kubernetes when it injects a container environment.
 		host, ok := lookup("HOST_IP")
-		if !ok || strings.TrimSpace(host) == "" {
+		host = strings.TrimSpace(host)
+		if !ok || host == "" {
 			return
 		}
-		setenvIfMissing(otelExporterEndpoint, "http://"+host+":4317", lookup)
+		setenvIfMissing(otelExporterEndpoint, "http://"+net.JoinHostPort(host, "4317"), lookup)
 	}
 	setenvIfMissing("OTEL_TRACES_EXPORTER", "otlp", lookup)
 	setenvIfMissing(otelExporterProtocol, "grpc", lookup)
@@ -78,7 +81,7 @@ func ciResourceAttributes(lookup func(string) (string, bool)) string {
 	attrs := make([]string, 0, len(fields))
 	for _, field := range fields {
 		if value, ok := lookup(field.env); ok && value != "" {
-			attrs = append(attrs, field.attribute+"="+value)
+			attrs = append(attrs, field.attribute+"="+url.PathEscape(value))
 		}
 	}
 	return strings.Join(attrs, ",")
