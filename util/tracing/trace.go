@@ -33,8 +33,9 @@ func ConfigureCI() {
 		return
 	}
 
+	endpoint, _ := lookup(otelExporterEndpoint)
 	tracesEndpoint, _ := lookup(otelTracesExporterEndpoint)
-	if _, ok := lookup(otelExporterEndpoint); !ok && strings.TrimSpace(tracesEndpoint) == "" {
+	if strings.TrimSpace(endpoint) == "" && strings.TrimSpace(tracesEndpoint) == "" {
 		// Resolve HOST_IP here instead of passing the Kubernetes $(HOST_IP)
 		// expression to the Buildx process. That expression is only expanded by
 		// Kubernetes when it injects a container environment.
@@ -43,11 +44,14 @@ func ConfigureCI() {
 		if !ok || host == "" {
 			return
 		}
-		setenvIfMissing(otelExporterEndpoint, "http://"+net.JoinHostPort(host, defaultOTLPPort(lookup)), lookup)
+		setenvIfEmpty(otelExporterEndpoint, "http://"+net.JoinHostPort(host, defaultOTLPPort(lookup)), lookup)
 	}
-	setenvIfMissing("OTEL_TRACES_EXPORTER", "otlp", lookup)
-	setenvIfMissing(otelExporterProtocol, "grpc", lookup)
+	setenvIfEmpty("OTEL_TRACES_EXPORTER", "otlp", lookup)
+	setenvIfEmpty(otelExporterProtocol, "grpc", lookup)
 	existingAttrs, _ := lookup(otelResourceAttrs)
+	if strings.TrimSpace(existingAttrs) == "" {
+		existingAttrs = ""
+	}
 	if attrs := mergeCIResourceAttributes(existingAttrs, lookup); attrs != "" && attrs != existingAttrs {
 		_ = os.Setenv(otelResourceAttrs, attrs)
 	}
@@ -64,8 +68,8 @@ func defaultOTLPPort(lookup func(string) (string, bool)) string {
 	return "4317"
 }
 
-func setenvIfMissing(name, value string, lookup func(string) (string, bool)) {
-	if _, ok := lookup(name); !ok {
+func setenvIfEmpty(name, value string, lookup func(string) (string, bool)) {
+	if existing, _ := lookup(name); strings.TrimSpace(existing) == "" {
 		_ = os.Setenv(name, value)
 	}
 }
@@ -110,7 +114,7 @@ func mergeCIResourceAttributes(existing string, lookup func(string) (string, boo
 		if _, ok := existingKeys[field.attribute]; ok {
 			continue
 		}
-		if value, ok := lookup(field.env); ok && value != "" {
+		if value, ok := lookup(field.env); ok && strings.TrimSpace(value) != "" {
 			attrs = append(attrs, field.attribute+"="+url.PathEscape(value))
 		}
 	}

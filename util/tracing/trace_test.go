@@ -110,3 +110,27 @@ func TestConfigureCITracesEndpoint(t *testing.T) {
 	require.Empty(t, os.Getenv(otelExporterEndpoint))
 	require.Equal(t, "ci.job.id=123", os.Getenv(otelResourceAttrs))
 }
+
+func TestConfigureCIEmptyOTelValues(t *testing.T) {
+	clearCIEnv(t)
+
+	t.Setenv("CI", "true")
+	t.Setenv("CI_JOB_ID", "123")
+	t.Setenv("HOST_IP", "10.0.0.1")
+	for _, key := range []string{
+		"OTEL_TRACES_EXPORTER",
+		otelExporterEndpoint,
+		otelExporterProtocol,
+		otelTracesExporterEndpoint,
+		otelTracesExporterProtocol,
+		otelResourceAttrs,
+	} {
+		t.Setenv(key, " \t ")
+	}
+	ConfigureCI()
+
+	require.Equal(t, "otlp", os.Getenv("OTEL_TRACES_EXPORTER"))
+	require.Equal(t, "http://10.0.0.1:4317", os.Getenv(otelExporterEndpoint))
+	require.Equal(t, "grpc", os.Getenv(otelExporterProtocol))
+	require.Equal(t, "ci.job.id=123", os.Getenv(otelResourceAttrs))
+}
