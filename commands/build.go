@@ -60,6 +60,7 @@ import (
 	"github.com/spf13/pflag"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
+	"go.opentelemetry.io/otel/trace"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/protobuf/proto"
 )
@@ -322,6 +323,7 @@ func (o *buildOptionsHash) String() string {
 func runBuild(ctx context.Context, dockerCli command.Cli, debugOpts debuggerOptions, options buildOptions) (err error) {
 	mp := dockerCli.MeterProvider()
 
+	tracing.ConfigureCI()
 	ctx, end, err := tracing.TraceCurrentCommand(ctx, []string{"build", options.contextPath},
 		attribute.String("builder", options.builder),
 		attribute.String("context", options.contextPath),
@@ -363,6 +365,7 @@ func runBuild(ctx context.Context, dockerCli command.Cli, debugOpts debuggerOpti
 		return err
 	}
 	driverType := b.Driver
+	trace.SpanFromContext(ctx).SetAttributes(attribute.String("driver", driverType))
 
 	attributes := buildMetricAttributes(dockerCli, driverType, &options, debugOpts)
 
