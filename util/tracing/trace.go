@@ -47,10 +47,9 @@ func ConfigureCI() {
 	}
 	setenvIfMissing("OTEL_TRACES_EXPORTER", "otlp", lookup)
 	setenvIfMissing(otelExporterProtocol, "grpc", lookup)
-	if _, ok := lookup(otelResourceAttrs); !ok {
-		if attrs := ciResourceAttributes(lookup); attrs != "" {
-			_ = os.Setenv(otelResourceAttrs, attrs)
-		}
+	existingAttrs, _ := lookup(otelResourceAttrs)
+	if attrs := mergeCIResourceAttributes(existingAttrs, lookup); attrs != "" && attrs != existingAttrs {
+		_ = os.Setenv(otelResourceAttrs, attrs)
 	}
 }
 
@@ -72,6 +71,10 @@ func setenvIfMissing(name, value string, lookup func(string) (string, bool)) {
 }
 
 func ciResourceAttributes(lookup func(string) (string, bool)) string {
+	return mergeCIResourceAttributes("", lookup)
+}
+
+func mergeCIResourceAttributes(existing string, lookup func(string) (string, bool)) string {
 	fields := []struct {
 		attribute string
 		env       string
@@ -92,8 +95,21 @@ func ciResourceAttributes(lookup func(string) (string, bool)) string {
 		{"ci.runner.id", "CI_RUNNER_ID"},
 	}
 
-	attrs := make([]string, 0, len(fields))
+	existingKeys := make(map[string]struct{})
+	for _, pair := range strings.Split(existing, ",") {
+		if key, _, ok := strings.Cut(pair, "="); ok {
+			existingKeys[strings.TrimSpace(key)] = struct{}{}
+		}
+	}
+
+	attrs := make([]string, 0, len(fields)+1)
+	if existing != "" {
+		attrs = append(attrs, existing)
+	}
 	for _, field := range fields {
+		if _, ok := existingKeys[field.attribute]; ok {
+			continue
+		}
 		if value, ok := lookup(field.env); ok && value != "" {
 			attrs = append(attrs, field.attribute+"="+url.PathEscape(value))
 		}

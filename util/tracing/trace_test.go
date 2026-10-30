@@ -19,6 +19,14 @@ func TestCIResourceAttributes(t *testing.T) {
 		"CI_JOB_NAME":     "package-oci: [linux, amd64]%",
 		"CI_PROJECT_PATH": "org/project",
 	})))
+
+	require.Equal(t, "docker.cli.cobra.command_path=buildx%20build,ci.job.id=explicit,ci.pipeline.id=456", mergeCIResourceAttributes(
+		"docker.cli.cobra.command_path=buildx%20build,ci.job.id=explicit",
+		lookup(map[string]string{
+			"CI_JOB_ID":      "123",
+			"CI_PIPELINE_ID": "456",
+		}),
+	))
 }
 
 func clearCIEnv(t *testing.T) {
@@ -57,12 +65,13 @@ func TestConfigureCI(t *testing.T) {
 	t.Setenv("CI", "true")
 	t.Setenv("CI_JOB_ID", "123")
 	t.Setenv("HOST_IP", "10.0.0.1")
+	t.Setenv("OTEL_RESOURCE_ATTRIBUTES", "docker.cli.cobra.command_path=buildx%20build")
 	ConfigureCI()
 
 	require.Equal(t, "otlp", os.Getenv("OTEL_TRACES_EXPORTER"))
 	require.Equal(t, "http://10.0.0.1:4317", os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT"))
 	require.Equal(t, "grpc", os.Getenv("OTEL_EXPORTER_OTLP_PROTOCOL"))
-	require.Equal(t, "ci.job.id=123", os.Getenv("OTEL_RESOURCE_ATTRIBUTES"))
+	require.Equal(t, "docker.cli.cobra.command_path=buildx%20build,ci.job.id=123", os.Getenv("OTEL_RESOURCE_ATTRIBUTES"))
 }
 
 func TestConfigureCIIPv6(t *testing.T) {
