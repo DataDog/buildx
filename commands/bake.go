@@ -49,6 +49,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/tonistiigi/go-csvvalue"
 	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 )
 
 const (
@@ -85,6 +86,7 @@ type bakeOptions struct {
 func runBake(ctx context.Context, dockerCli command.Cli, targets []string, in bakeOptions, cFlags commonFlags, filesFromEnv bool) (err error) {
 	mp := dockerCli.MeterProvider()
 
+	tracing.ConfigureCI()
 	ctx, end, err := tracing.TraceCurrentCommand(ctx, append([]string{"bake"}, targets...),
 		attribute.String("builder", in.builder),
 		attribute.StringSlice("targets", targets),
@@ -187,6 +189,9 @@ func runBake(ctx context.Context, dockerCli command.Cli, targets []string, in ba
 		progressConsoleDesc = fmt.Sprintf("%s:%s", b.Driver, b.Name)
 		progressTextDesc = fmt.Sprintf("building with %q instance using %s driver", b.Name, b.Driver)
 		driverType = b.Driver
+	}
+	if driverType != "" {
+		trace.SpanFromContext(ctx).SetAttributes(attribute.String("driver", driverType))
 	}
 
 	var term bool
