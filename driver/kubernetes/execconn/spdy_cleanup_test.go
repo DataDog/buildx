@@ -99,18 +99,21 @@ func TestExecConnectionSPDYLifecycle(t *testing.T) {
 			case <-time.After(5 * time.Second):
 				t.Fatal("control payload was not delivered")
 			}
+			t.Log("control: real SPDY upgrade and stdout payload READY received")
 			if clientCloses {
 				if err := conn.Close(); err != nil {
 					t.Fatal(err)
 				}
 				select {
 				case <-wire.CloseChan():
+					t.Log("client Close: server observed SPDY connection closure within 1s")
 				case <-time.After(time.Second):
 					t.Fatal("client Close left real SPDY transport open")
 				}
 				if ctx.Err() != nil {
 					t.Fatal("connection close cancelled parent build context")
 				}
+				t.Log("isolation: parent build context remains usable")
 			} else {
 				readDone := make(chan error, 1)
 				go func() { _, err := conn.Read(make([]byte, 1)); readDone <- err }()
