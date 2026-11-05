@@ -320,6 +320,8 @@ func (o *buildOptionsHash) String() string {
 
 func runBuild(ctx context.Context, dockerCli command.Cli, debugOpts debuggerOptions, options buildOptions) (err error) {
 	mp := dockerCli.MeterProvider()
+	ctx, finishStartup := progress.TrackBuildStartup(ctx, mp)
+	defer func() { finishStartup(err) }()
 
 	ctx, end, err := tracing.TraceCurrentCommand(ctx, []string{"build", options.contextPath},
 		attribute.String("builder", options.builder),

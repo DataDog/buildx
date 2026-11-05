@@ -667,7 +667,7 @@ func BuildWithResultHandler(ctx context.Context, nodes []builder.Node, opts map[
 					so.Frontend = ""
 					so.FrontendInputs = nil
 
-					ch, done := progress.NewChannel(pw)
+					ch, done := progress.NewChannel(progress.WithBuildStartup(ctx, pw))
 					defer func() { <-done }()
 
 					var (
