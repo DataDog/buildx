@@ -4,6 +4,7 @@ import (
 	"context"
 	stderrors "errors"
 	"fmt"
+	"io"
 	"math/rand/v2"
 	"net"
 	"strings"
@@ -294,23 +295,19 @@ func (d *Driver) Dial(ctx context.Context) (net.Conn, error) {
 	if err != nil {
 		return nil, err
 	}
-	pod, err := d.podChooser.ChoosePod(ctx)
-	if err != nil {
-		return nil, err
-	}
-	if len(pod.Spec.Containers) == 0 {
-		return nil, errors.Errorf("pod %s does not have any container", pod.Name)
-	}
-	containerName := pod.Spec.Containers[0].Name
-	cmd := []string{"buildctl", "dial-stdio"}
-
-	// Retry connection with exponential backoff for transient errors
-	// See https://github.com/docker/buildx/issues/2668
 	var conn net.Conn
-	err = tryWithBackoff(ctx, pod.Name, func() error {
-		var err error
-		conn, err = execconn.ExecConn(ctx, d.podClient.RESTClient(), restClientConfig, pod.Namespace, pod.Name, containerName, cmd)
-		return err
+	var attempted []string
+	err = tryWithBackoff(ctx, "selected worker", func() error {
+		pod, err := d.chooseRetryPod(ctx, attempted)
+		if err != nil {
+			return err
+		}
+		if len(pod.Spec.Containers) == 0 {
+			return errors.Errorf("pod %s does not have any container", pod.Name)
+		}
+		attempted = append(attempted, pod.Name)
+		conn, err = execconn.ExecConn(ctx, d.podClient.RESTClient(), restClientConfig, pod.Namespace, pod.Name, pod.Spec.Containers[0].Name, []string{"buildctl", "dial-stdio"})
+		return errors.Wrapf(err, "connect to pod %s/%s", pod.Namespace, pod.Name)
 	})
 	return conn, err
 }
@@ -327,6 +324,9 @@ func tryWithBackoff(ctx context.Context, podName string, fn func() error) error 
 
 	var lastErr error
 	for attempt := range maxRetries {
+		if ctx.Err() != nil {
+			return context.Cause(ctx)
+		}
 		err := fn()
 		if err == nil {
 			return nil
@@ -358,6 +358,18 @@ func tryWithBackoff(ctx context.Context, podName string, fn func() error) error 
 func isTransientConnectionError(err error) bool {
 	if err == nil {
 		return false
+	}
+
+	if stderrors.Is(err, context.Canceled) {
+		return false
+	}
+	if stderrors.Is(err, io.ErrClosedPipe) || stderrors.Is(err, io.EOF) || stderrors.Is(err, io.ErrUnexpectedEOF) {
+		return true
+	}
+	for _, signature := range []string{"io: read/write on closed pipe", "failed to write client preface", "error reading server preface"} {
+		if strings.Contains(err.Error(), signature) {
+			return true
+		}
 	}
 
 	// Check for context deadline exceeded
