@@ -46,7 +46,7 @@ func newDeployment() *appsv1.Deployment {
 func newPod(name string, phase corev1.PodPhase) corev1.Pod {
 	return corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "test-ns"},
-		Status:     corev1.PodStatus{Phase: phase},
+		Status:     corev1.PodStatus{Phase: phase, Conditions: []corev1.PodCondition{{Type: corev1.PodReady, Status: corev1.ConditionTrue}}},
 	}
 }
 
@@ -154,7 +154,7 @@ func TestRandomPodChooserSkipsTerminatingPods(t *testing.T) {
 		pc := &RandomPodChooser{PodClient: client, Deployment: newDeployment()}
 
 		_, err := pc.ChoosePod(context.Background())
-		require.EqualError(t, err, "no running buildkit pods found")
+		require.EqualError(t, err, "no ready buildkit pods found")
 	})
 }
 
@@ -196,6 +196,35 @@ func TestStickyPodChooserSkipsTerminatingPods(t *testing.T) {
 		pc := &StickyPodChooser{Key: "key", PodClient: client, Deployment: newDeployment()}
 
 		_, err := pc.ChoosePod(context.Background())
-		require.EqualError(t, err, "no running buildkit pods found")
+		require.EqualError(t, err, "no ready buildkit pods found")
 	})
+}
+
+func TestChoosersRequireReadiness(t *testing.T) {
+	for _, condition := range []corev1.ConditionStatus{corev1.ConditionFalse, corev1.ConditionUnknown, ""} {
+		t.Run(string(condition), func(t *testing.T) {
+			unready := newPod("unready", corev1.PodRunning)
+			unready.Status.Conditions = nil
+			if condition != "" {
+				unready.Status.Conditions = []corev1.PodCondition{{Type: corev1.PodReady, Status: condition}}
+			}
+			client := &fakePodClient{pods: []corev1.Pod{unready, newPod("ready", corev1.PodRunning)}}
+			for _, chooser := range []PodChooser{
+				&RandomPodChooser{PodClient: client, Deployment: newDeployment()},
+				&StickyPodChooser{Key: "key", PodClient: client, Deployment: newDeployment()},
+			} {
+				pod, err := chooser.ChoosePod(context.Background())
+				require.NoError(t, err)
+				require.Equal(t, "ready", pod.Name)
+			}
+			client.pods = []corev1.Pod{unready}
+			for _, chooser := range []PodChooser{
+				&RandomPodChooser{PodClient: client, Deployment: newDeployment()},
+				&StickyPodChooser{Key: "key", PodClient: client, Deployment: newDeployment()},
+			} {
+				_, err := chooser.ChoosePod(context.Background())
+				require.EqualError(t, err, "no ready buildkit pods found")
+			}
+		})
+	}
 }
