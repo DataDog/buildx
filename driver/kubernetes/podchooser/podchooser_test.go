@@ -257,7 +257,7 @@ func TestStickyPodChooserErrors(t *testing.T) {
 	t.Run("no pods", func(t *testing.T) {
 		pc := &StickyPodChooser{PodClient: &fakePodClient{}, Deployment: newDeployment()}
 		_, err := pc.ChoosePod(context.Background())
-		require.EqualError(t, err, "no running buildkit pods found")
+		require.EqualError(t, err, "no ready buildkit pods found")
 	})
 	t.Run("list error", func(t *testing.T) {
 		want := errors.New("list failed")
@@ -294,7 +294,7 @@ func TestStickyPodChooserRetriesEmptyList(t *testing.T) {
 			case tc.err != nil:
 				require.ErrorIs(t, err, tc.err)
 			case len(tc.pods) == 0:
-				require.EqualError(t, err, "no running buildkit pods found")
+				require.EqualError(t, err, "no ready buildkit pods found")
 			default:
 				require.NoError(t, err)
 				require.Equal(t, "pod-a", pod.Name)
