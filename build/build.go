@@ -880,7 +880,7 @@ func Build(ctx context.Context, nodes []builder.Node, opts map[string]Options, d
 					so.Frontend = ""
 					so.FrontendInputs = nil
 
-					ch, done := progress.NewChannel(pw)
+					ch, done := progress.NewChannel(progress.WithBuildStartup(ctx, pw))
 					defer func() { <-done }()
 
 					var (

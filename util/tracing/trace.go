@@ -131,6 +131,7 @@ func mergeCIResourceAttributes(existing string, lookup func(string) (string, boo
 }
 
 func TraceCurrentCommand(ctx context.Context, args []string, attrs ...attribute.KeyValue) (context.Context, func(error), error) {
+	ConfigureCI()
 	opts := []sdktrace.TracerProviderOption{
 		sdktrace.WithResource(detect.Resource()),
 		sdktrace.WithBatcher(delegated.DefaultExporter),

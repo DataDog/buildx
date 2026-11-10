@@ -321,9 +321,9 @@ func (o *buildOptionsHash) String() string {
 }
 
 func runBuild(ctx context.Context, dockerCli command.Cli, debugOpts debuggerOptions, options buildOptions) (err error) {
+	start := time.Now()
 	mp := dockerCli.MeterProvider()
 
-	tracing.ConfigureCI()
 	ctx, end, err := tracing.TraceCurrentCommand(ctx, []string{"build", options.contextPath},
 		attribute.String("builder", options.builder),
 		attribute.String("context", options.contextPath),
@@ -335,6 +335,8 @@ func runBuild(ctx context.Context, dockerCli command.Cli, debugOpts debuggerOpti
 	defer func() {
 		end(err)
 	}()
+	ctx, finishStartup := progress.TrackBuildStartup(ctx, start)
+	defer func() { finishStartup(err) }()
 
 	opts, err := options.toOptions()
 	if err != nil {
@@ -366,6 +368,7 @@ func runBuild(ctx context.Context, dockerCli command.Cli, debugOpts debuggerOpti
 	}
 	driverType := b.Driver
 	trace.SpanFromContext(ctx).SetAttributes(attribute.String("driver", driverType))
+	progress.SetBuildStartupDriver(ctx, driverType)
 
 	attributes := buildMetricAttributes(dockerCli, driverType, &options, debugOpts)
 

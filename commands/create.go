@@ -3,6 +3,7 @@ package commands
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -13,9 +14,14 @@ import (
 	"github.com/docker/buildx/util/cobrautil"
 	"github.com/docker/buildx/util/cobrautil/completion"
 	"github.com/docker/buildx/util/confutil"
+	"github.com/docker/buildx/util/tracing"
+	"github.com/docker/buildx/version"
 	"github.com/docker/cli/cli"
 	"github.com/docker/cli/cli/command"
 	"github.com/spf13/cobra"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 )
 
 type createOptions struct {
@@ -34,7 +40,35 @@ type createOptions struct {
 	// upgrade      bool // perform upgrade of the driver
 }
 
-func runCreate(ctx context.Context, dockerCli command.Cli, in createOptions, args []string) error {
+func runCreate(ctx context.Context, dockerCli command.Cli, in createOptions, args []string) (err error) {
+	ctx, end, err := tracing.TraceCurrentCommand(ctx, []string{"buildx.builder.create"},
+		attribute.String("driver", in.driver),
+		attribute.String("buildx.version", version.Version),
+		attribute.Bool("buildx.create.append", in.actionAppend),
+		attribute.Bool("buildx.create.bootstrap", in.bootstrap),
+		attribute.Bool("buildx.create.leave", in.actionLeave),
+	)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		outcome := "success"
+		switch {
+		case errors.Is(err, context.DeadlineExceeded):
+			outcome = "deadline_exceeded"
+		case errors.Is(err, context.Canceled):
+			outcome = "canceled"
+		case err != nil:
+			outcome = "error"
+		}
+		span := trace.SpanFromContext(ctx)
+		span.SetAttributes(attribute.String("buildx.create.outcome", outcome))
+		if err != nil {
+			span.SetStatus(codes.Error, outcome)
+		}
+		end(err)
+	}()
+
 	txn, release, err := storeutil.GetStore(dockerCli)
 	if err != nil {
 		return err
@@ -71,6 +105,8 @@ func runCreate(ctx context.Context, dockerCli command.Cli, in createOptions, arg
 	if err != nil {
 		return err
 	}
+
+	trace.SpanFromContext(ctx).SetAttributes(attribute.String("driver", b.Driver))
 
 	// The store is no longer used from this point.
 	// Release it so we aren't holding the file lock during the boot.
