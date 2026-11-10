@@ -306,6 +306,13 @@ func (d *Driver) Dial(ctx context.Context) (net.Conn, error) {
 			return errors.Errorf("pod %s does not have any container", pod.Name)
 		}
 		attempted = append(attempted, pod.Name)
+		logrus.WithFields(logrus.Fields{
+			"namespace": pod.Namespace,
+			"pod":       pod.Name,
+			"pod_uid":   string(pod.UID),
+			"node":      pod.Spec.NodeName,
+			"container": pod.Spec.Containers[0].Name,
+		}).Info("Connecting to Kubernetes BuildKit worker")
 		conn, err = execconn.ExecConn(ctx, d.podClient.RESTClient(), restClientConfig, pod.Namespace, pod.Name, pod.Spec.Containers[0].Name, []string{"buildctl", "dial-stdio"})
 		return errors.Wrapf(err, "connect to pod %s/%s", pod.Namespace, pod.Name)
 	})
